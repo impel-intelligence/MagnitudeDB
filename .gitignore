@@ -7,3 +7,4 @@ DerivedData/
 .swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
 .netrc
 Tests/MagnitudeDBTests/Resources/output/
+/Tests/MagnitudeDBTests/Resources/data.sql
