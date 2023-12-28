@@ -8,3 +8,4 @@ DerivedData/
 .netrc
 Tests/MagnitudeDBTests/Resources/output/
 /Tests/MagnitudeDBTests/Resources/data.sql
+/Package.resolved
