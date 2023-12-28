@@ -23,16 +23,31 @@ extension Array: Value where Element == Double {
 }
 
 public final class MagnitudeDB {
+    enum MagnitudeDBError: LocalizedError {
+        case failedToCreateCollection
+        case collectionDoesNotExist
+        case databaseNotTrained
+        case noCellsFound
+    }
+    
     public struct Document: Codable {
         let id: Int
         let content: String
         let embedding: [Double]
+        let collection: Int
         var cell: Int?
     }
     
     public struct Cell: Codable {
         let id: Int
         let point: [Double]
+    }
+    
+    public struct Collection: Codable, Equatable {
+        let id: Int
+        let name: String
+        
+        static let all: Collection = Collection(id: -1, name: "_all_all_all_")
     }
     
     public static let defaultDataURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!.appending(path: "MagnitudeDB").appending(component: "db").appendingPathExtension("sql")
@@ -67,12 +82,14 @@ public final class MagnitudeDB {
             })
             
             // MARK: Create the collections table
-            //            let collections = Table("collections")
-            //            let collections_id = Expression<Int>("id")
-            //
-            //            try db.run(collections.create(ifNotExists: true) { t in
-            //                t.column(collections_id, primaryKey: .autoincrement)
-            //            })
+            let collections = Table("collections")
+            let collectionsID = Expression<Int>("id")
+            let collectionsName = Expression<String>("name")
+
+            try db.run(collections.create(ifNotExists: true) { t in
+                t.column(collectionsID, primaryKey: .autoincrement)
+                t.column(collectionsName, unique: true)
+            })
             
             // MARK: Create the documents table
             let documents = Table("documents")
@@ -80,14 +97,14 @@ public final class MagnitudeDB {
             let content = Expression<String>("content")
             let embedding = Expression<[Double]>("embedding")
             let cell = Expression<Int?>("cell")
-            //            let collection = Expression<Int>("collection")
+            let collection = Expression<Int>("collection")
             
             try db.run(documents.create(ifNotExists: true) { t in
                 t.column(documentID, primaryKey: .autoincrement)
                 t.column(content)
                 t.column(embedding)
                 t.column(cell, references: cells, cellID)
-                //                t.column(collection, references: collections, collections_id)
+                t.column(collection, references: collections, collectionsID)
             })
         } catch {
             print("Failed to create tables:", error)
@@ -95,7 +112,7 @@ public final class MagnitudeDB {
     }
             
     /// Implements a Pairwise Nearest Neighbor (PNN) method to generate a set of mean vectors used as Voronoi cell centroids
-    public func trainDatabase(targetCellCount: Int) throws {
+    public func train(targetCellCount: Int) throws {
         let cellsTable = Table("cells")
         let documentsTable = Table("documents")
         let allDocuments: [Document] = try db.prepare(documentsTable).map({ return try $0.decode() })
@@ -132,16 +149,29 @@ public final class MagnitudeDB {
         
         isTrained = true
     }
+    
+    public func resetTraining() throws {
+        let cellsTable = Table("cells")
+
+        let documentsTable = Table("documents")
+        let documentCell = Expression<Int?>("cell")
+
+        try db.run(cellsTable.delete())
+
+        try db.run(documentsTable.update(documentCell <- nil))
+        
+        isTrained = false
+    }
 }
 
 // MARK: Data Retrieval and Setters
 extension MagnitudeDB {
-    public func addDocument(content: String, embedding: [Double]) throws {
+    public func createDocument(collection: MagnitudeDB.Collection, content: String, embedding: [Double]) throws {
         let documents = Table("documents")
         let documentID = Expression<Int>("id")
         
         let nextID = (try db.scalar(documents.select(documentID.max)) ?? 0) + 1
-        var document = Document(id: nextID, content: content, embedding: embedding)
+        var document = Document(id: nextID, content: content, embedding: embedding, collection: collection.id)
         
         if self.isTrained {
             let closestCell = try closestCell(to: embedding)
@@ -149,12 +179,42 @@ extension MagnitudeDB {
         }
         
         try db.run(documents.insert(document))
-
     }
     
-    public func getAllDocuments() throws -> [Document] {
-        let documents = Table("documents")
-        return try db.prepare(documents).map({ return try $0.decode() })
+    public func createCollection(_ name: String) throws -> MagnitudeDB.Collection {
+        let collectionTable = Table("collections")
+        let collectionsName = Expression<String>("name")
+        let collectionsID = Expression<Int>("id")
+
+        let rowID = try db.run(collectionTable.insert([collectionsName <- name]))
+        let databaseQuery = collectionTable.filter(collectionsID == Int(rowID)).limit(1)
+        let collections: [MagnitudeDB.Collection] = try db.prepare(databaseQuery).map({ return try $0.decode() })
+        
+        guard let collection = collections.first else { throw MagnitudeDBError.failedToCreateCollection }
+        return collection
+    }
+    
+    public func getCollection(_ name: String) throws -> MagnitudeDB.Collection {
+        let collectionTable = Table("collections")
+        let collectionsName = Expression<String>("name")
+        let databaseQuery = collectionTable.filter(collectionsName == name).limit(1)
+        let collections: [MagnitudeDB.Collection] = try db.prepare(databaseQuery).map({ return try $0.decode() })
+        
+        guard let collection = collections.first else { throw MagnitudeDBError.collectionDoesNotExist }
+        return collection
+    }
+
+    public func getAllDocuments(in collection: MagnitudeDB.Collection) throws -> [Document] {
+        let documentsTable = Table("documents")
+        let documentCollection = Expression<Int>("collection")
+        
+        var databaseQuery = documentsTable
+        
+        if collection != .all {
+            databaseQuery = databaseQuery.where(documentCollection == collection.id)
+        }
+        
+        return try db.prepare(databaseQuery).map({ return try $0.decode() })
     }
     
     public func getAllCells() throws -> [Cell] {
@@ -165,28 +225,35 @@ extension MagnitudeDB {
 
 // MARK: Search Functions
 extension MagnitudeDB {
-    func dotProductSearch(query: [Double], count: Int = 5) throws -> [Document] {
-        let documents = try getAllDocuments()
+    func dotProductSearch(query: [Double], collection: MagnitudeDB.Collection, count: Int = 5) throws -> [Document] {
+        let documents = try getAllDocuments(in: collection)
         return try _dotProductSearch(query: query, count: count, documents: documents)
     }
     
-    func cosineSimilaritySearch(query: [Double], count: Int = 5) throws -> [Document] {
-        let documents = try getAllDocuments()
+    func cosineSimilaritySearch(query: [Double], collection: MagnitudeDB.Collection, count: Int = 5) throws -> [Document] {
+        let documents = try getAllDocuments(in: collection)
         return try _cosineSimilaritySearch(query: query, count: count, documents: documents)
     }
     
-    func euclidianDistanceSearch(query: [Double], count: Int = 5) throws -> [Document] {
-        let documents = try getAllDocuments()
+    func euclidianDistanceSearch(query: [Double], collection: MagnitudeDB.Collection, count: Int = 5) throws -> [Document] {
+        let documents = try getAllDocuments(in: collection)
         return try _euclidianDistanceSearch(query: query, count: count, documents: documents)
     }
     
-    func voronoiSearch(query: [Double], count: Int = 5) throws -> [Document] {
-        guard isTrained else { return [] } // TODO: Throw an error
+    func voronoiSearch(query: [Double], collection: MagnitudeDB.Collection, count: Int = 5) throws -> [Document] {
+        guard isTrained else { throw MagnitudeDBError.databaseNotTrained }
         
         let closestCell = try closestCell(to: query)
         let documentsTable = Table("documents")
         let documentCell = Expression<Int?>("cell")
-        let databaseQuery = documentsTable.filter(documentCell == closestCell.id)
+        let documentCollection = Expression<Int>("collection")
+        
+        var databaseQuery = documentsTable.filter(documentCell == closestCell.id)
+        
+        if collection != .all {
+            databaseQuery = databaseQuery.where(documentCollection == collection.id)
+        }
+        
         let cellDocuments: [Document] = try db.prepare(databaseQuery).map({ return try $0.decode() })
 
         return try _euclidianDistanceSearch(query: query, count: count, documents: cellDocuments)
@@ -281,7 +348,7 @@ extension MagnitudeDB {
             }
         }
 
-        guard let closestCell = closestCell.1 else { return Cell(id: 0, point: []) } // TODO: Throw an error
+        guard let closestCell = closestCell.1 else { throw MagnitudeDBError.noCellsFound }
         return closestCell
     }
 }
@@ -333,5 +400,4 @@ extension MagnitudeDB {
         
         return (neighbors[closestVectorIndex], closestVectorIndex)
     }
-
 }

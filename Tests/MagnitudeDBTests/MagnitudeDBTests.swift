@@ -21,20 +21,26 @@ final class MagnitudeDBTests: XCTestCase {
         var outputDirectory = URL(fileURLWithPath: #file, isDirectory: false).deletingLastPathComponent()
         outputDirectory = outputDirectory.appendingPathComponent("Resources", conformingTo: .directory).appendingPathComponent("output", conformingTo: .directory)
 
-        let files = try! FileManager.default.contentsOfDirectory(atPath: outputDirectory.path())
-        
-        for file in files {
-            guard file != ".DS_Store" else { continue }
-            do {
-                let fileURL = outputDirectory.appending(path: file)
-                let fileBlob = try Data(contentsOf: fileURL)
-                let tmp = try JSONDecoder().decode(SavedEmbeddingsData.self, from: fileBlob)
-
-                try database.addDocument(content: tmp.content, embedding: tmp.embeddings)
-            } catch {
-                print("(\(file)) Failed to retrieve:", error)
+        do {
+            let files = try FileManager.default.contentsOfDirectory(atPath: outputDirectory.path())
+            let collection = try database.createCollection("wikipedia")
+            
+            for file in files {
+                guard file != ".DS_Store" else { continue }
+                do {
+                    let fileURL = outputDirectory.appending(path: file)
+                    let fileBlob = try Data(contentsOf: fileURL)
+                    let tmp = try JSONDecoder().decode(SavedEmbeddingsData.self, from: fileBlob)
+                    
+                    try database.createDocument(collection: collection, content: tmp.content, embedding: tmp.embeddings)
+                } catch {
+                    print("(\(file)) Failed to retrieve:", error)
+                }
             }
+        } catch {
+            print("Failed to initialize database", error)
         }
+        
     }
     
     override func setUp() async throws {
@@ -44,39 +50,63 @@ final class MagnitudeDBTests: XCTestCase {
         database = MagnitudeDB(dataURL: dbLocation)
     }
         
-    func testReadData() async throws {
-        let documents = try database.getAllDocuments()
-        print("Found \(documents.count) documents")
+    func testReadWikipediaCollection() async throws {
+        let collection = try database.getCollection("wikipedia")
+        let documents = try database.getAllDocuments(in: collection)
+        XCTAssert(documents.count == 907)
+    }
+    
+    func testReadEmptyCollection() async throws {
+        let collection = try database.createCollection("woah")
+        let documents = try database.getAllDocuments(in: collection)
+        XCTAssert(documents.count == 0)
     }
     
     func testDotProductSearch() async throws {
+        let collection = try database.getCollection("wikipedia")
         let embedding = TestEmbeddings.searchText
         
         print("Dot Product Search")
-        let _ = try database.dotProductSearch(query: embedding)
+        let _ = try database.dotProductSearch(query: embedding, collection: collection)
     }
     
     func testCosineSearch() async throws {
+        let collection = try database.getCollection("wikipedia")
         let embedding = TestEmbeddings.searchText
         
         print("Cosine Search")
-        let _ = try database.dotProductSearch(query: embedding)
+        let _ = try database.dotProductSearch(query: embedding, collection: collection)
     }
     
     func testEuclidianDistanceSearch() async throws {
+        let collection = try database.getCollection("wikipedia")
         let embedding = TestEmbeddings.searchText
         
         print("Euclidian Distance Search")
-        let _ = try database.euclidianDistanceSearch(query: embedding)
+        let _ = try database.euclidianDistanceSearch(query: embedding, collection: collection)
     }
     
     func testVoronoiSearch() async throws {
+        let collection = try database.getCollection("wikipedia")
         let embedding = TestEmbeddings.searchText
         
         print("Training Database")
-        try database.trainDatabase(targetCellCount: 64)
+        try database.resetTraining()
+        try database.train(targetCellCount: 64)
         
         print("Voronoi Search")
-        let _ = try database.voronoiSearch(query: embedding)
+        let _ = try database.voronoiSearch(query: embedding, collection: collection)
     }
+    
+    func testVoronoiSearchNoTraining() async throws {
+        let collection = try database.getCollection("wikipedia")
+        let embedding = TestEmbeddings.searchText
+        
+        print("Training Database")
+        try database.resetTraining()
+
+        print("Voronoi Search")
+        XCTAssertThrowsError(try database.voronoiSearch(query: embedding, collection: collection))
+    }
+
 }
