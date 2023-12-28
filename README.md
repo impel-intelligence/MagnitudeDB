@@ -9,3 +9,4 @@ A fast and modern Swift Vector Database for use in both iOS and macOS applicatio
     - Cosine
     - Euclidian Distance
     - Vornoi Cell Separation / Inverted File Index
+- Collection system for keeping document groups organized
