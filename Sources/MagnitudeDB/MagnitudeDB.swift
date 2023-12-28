@@ -58,7 +58,7 @@ public final class MagnitudeDB {
                 t.column(embedding)
                 t.column(cell, references: cells, cellID)
                 t.foreignKey(cell, references: cells, cellID, delete: .setNull)
-                t.foreignKey(cell, references: collections, collectionsID, delete: .cascade)
+                t.foreignKey(collection, references: collections, collectionsID, delete: .cascade)
             })
         } catch {
             print("Failed to create tables:", error)
