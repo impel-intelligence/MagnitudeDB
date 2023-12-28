@@ -1,4 +1,4 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 5.7.1
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
@@ -17,7 +17,6 @@ let package = Package(
     ], 
     dependencies: [
         .package(url: "https://github.com/stephencelis/SQLite.swift.git", from: "0.14.1"),
-        .package(url: "https://github.com/ActuallyTaylor/SLlama", branch: "main"),
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
@@ -28,6 +27,6 @@ let package = Package(
             ]),
         .testTarget(
             name: "MagnitudeDBTests",
-            dependencies: ["MagnitudeDB", "SLlama"]),
+            dependencies: ["MagnitudeDB"]),
     ]
 )

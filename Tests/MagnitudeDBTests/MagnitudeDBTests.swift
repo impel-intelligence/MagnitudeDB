@@ -1,6 +1,5 @@
 import XCTest
 @testable import MagnitudeDB
-import SLlama
 
 fileprivate struct SavedEmbeddingsData: Codable {
     var content: String
@@ -108,5 +107,4 @@ final class MagnitudeDBTests: XCTestCase {
         print("Voronoi Search")
         XCTAssertThrowsError(try database.voronoiSearch(query: embedding, collection: collection))
     }
-
 }

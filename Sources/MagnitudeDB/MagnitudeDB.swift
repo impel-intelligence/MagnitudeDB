@@ -2,54 +2,7 @@ import Foundation
 import SQLite
 import Accelerate
 
-extension Array: Expressible where Element == Double { }
-
-extension Array: Value where Element == Double {
-    public typealias Datatype = Blob
-    
-    public static var declaredDatatype: String {
-        return Blob.declaredDatatype
-    }
-    
-    public static func fromDatatypeValue(_ blob: Blob) -> Array<Double> {
-        let vectorData = try? JSONDecoder().decode(Self.self, from: Data.fromDatatypeValue(blob))
-        return vectorData ?? []
-    }
-    
-    public var datatypeValue: SQLite.Blob {
-        let vectorData = try! JSONEncoder().encode(self)
-        return vectorData.datatypeValue
-    }
-}
-
-public final class MagnitudeDB {
-    enum MagnitudeDBError: LocalizedError {
-        case failedToCreateCollection
-        case collectionDoesNotExist
-        case databaseNotTrained
-        case noCellsFound
-    }
-    
-    public struct Document: Codable {
-        let id: Int
-        let content: String
-        let embedding: [Double]
-        let collection: Int
-        var cell: Int?
-    }
-    
-    public struct Cell: Codable {
-        let id: Int
-        let point: [Double]
-    }
-    
-    public struct Collection: Codable, Equatable {
-        let id: Int
-        let name: String
-        
-        static let all: Collection = Collection(id: -1, name: "_all_all_all_")
-    }
-    
+public final class MagnitudeDB {    
     public static let defaultDataURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!.appending(path: "MagnitudeDB").appending(component: "db").appendingPathExtension("sql")
     
     let dataURL: URL
@@ -166,7 +119,7 @@ public final class MagnitudeDB {
 
 // MARK: Data Retrieval and Setters
 extension MagnitudeDB {
-    public func createDocument(collection: MagnitudeDB.Collection, content: String, embedding: [Double]) throws {
+    public func createDocument(collection: Collection, content: String, embedding: [Double]) throws {
         let documents = Table("documents")
         let documentID = Expression<Int>("id")
         
@@ -181,30 +134,30 @@ extension MagnitudeDB {
         try db.run(documents.insert(document))
     }
     
-    public func createCollection(_ name: String) throws -> MagnitudeDB.Collection {
+    public func createCollection(_ name: String) throws -> Collection {
         let collectionTable = Table("collections")
         let collectionsName = Expression<String>("name")
         let collectionsID = Expression<Int>("id")
 
         let rowID = try db.run(collectionTable.insert([collectionsName <- name]))
         let databaseQuery = collectionTable.filter(collectionsID == Int(rowID)).limit(1)
-        let collections: [MagnitudeDB.Collection] = try db.prepare(databaseQuery).map({ return try $0.decode() })
+        let collections: [Collection] = try db.prepare(databaseQuery).map({ return try $0.decode() })
         
         guard let collection = collections.first else { throw MagnitudeDBError.failedToCreateCollection }
         return collection
     }
     
-    public func getCollection(_ name: String) throws -> MagnitudeDB.Collection {
+    public func getCollection(_ name: String) throws -> Collection {
         let collectionTable = Table("collections")
         let collectionsName = Expression<String>("name")
         let databaseQuery = collectionTable.filter(collectionsName == name).limit(1)
-        let collections: [MagnitudeDB.Collection] = try db.prepare(databaseQuery).map({ return try $0.decode() })
+        let collections: [Collection] = try db.prepare(databaseQuery).map({ return try $0.decode() })
         
         guard let collection = collections.first else { throw MagnitudeDBError.collectionDoesNotExist }
         return collection
     }
 
-    public func getAllDocuments(in collection: MagnitudeDB.Collection) throws -> [Document] {
+    public func getAllDocuments(in collection: Collection) throws -> [Document] {
         let documentsTable = Table("documents")
         let documentCollection = Expression<Int>("collection")
         
@@ -225,22 +178,22 @@ extension MagnitudeDB {
 
 // MARK: Search Functions
 extension MagnitudeDB {
-    func dotProductSearch(query: [Double], collection: MagnitudeDB.Collection, count: Int = 5) throws -> [Document] {
+    public func dotProductSearch(query: [Double], collection: Collection, count: Int = 5) throws -> [Document] {
         let documents = try getAllDocuments(in: collection)
         return try _dotProductSearch(query: query, count: count, documents: documents)
     }
     
-    func cosineSimilaritySearch(query: [Double], collection: MagnitudeDB.Collection, count: Int = 5) throws -> [Document] {
+    public func cosineSimilaritySearch(query: [Double], collection: Collection, count: Int = 5) throws -> [Document] {
         let documents = try getAllDocuments(in: collection)
         return try _cosineSimilaritySearch(query: query, count: count, documents: documents)
     }
     
-    func euclidianDistanceSearch(query: [Double], collection: MagnitudeDB.Collection, count: Int = 5) throws -> [Document] {
+    public func euclidianDistanceSearch(query: [Double], collection: Collection, count: Int = 5) throws -> [Document] {
         let documents = try getAllDocuments(in: collection)
         return try _euclidianDistanceSearch(query: query, count: count, documents: documents)
     }
     
-    func voronoiSearch(query: [Double], collection: MagnitudeDB.Collection, count: Int = 5) throws -> [Document] {
+    public func voronoiSearch(query: [Double], collection: Collection, count: Int = 5) throws -> [Document] {
         guard isTrained else { throw MagnitudeDBError.databaseNotTrained }
         
         let closestCell = try closestCell(to: query)
