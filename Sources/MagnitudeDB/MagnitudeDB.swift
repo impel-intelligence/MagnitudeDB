@@ -57,7 +57,8 @@ public final class MagnitudeDB {
                 t.column(content)
                 t.column(embedding)
                 t.column(cell, references: cells, cellID)
-                t.column(collection, references: collections, collectionsID)
+                t.foreignKey(cell, references: cells, cellID, delete: .setNull)
+                t.foreignKey(cell, references: collections, collectionsID, delete: .cascade)
             })
         } catch {
             print("Failed to create tables:", error)
@@ -132,6 +133,13 @@ extension MagnitudeDB {
         }
         
         try db.run(documents.insert(document))
+    }
+    
+    public func deleteCollection(_ collection: Collection) throws {
+        let collectionsID = Expression<Int>("id")
+        let collection = Table("collections").filter(collectionsID == collection.id)
+
+        try db.run(collection.delete())
     }
     
     public func createCollection(_ name: String) throws -> Collection {

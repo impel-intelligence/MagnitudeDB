@@ -107,4 +107,10 @@ final class MagnitudeDBTests: XCTestCase {
         print("Voronoi Search")
         XCTAssertThrowsError(try database.voronoiSearch(query: embedding, collection: collection))
     }
+    
+    func testDeleteCollection() async throws {
+        let collection = try database.createCollection("This is so cool")
+        try database.deleteCollection(collection)
+        XCTAssertThrowsError(try database.getCollection("This is so cool"))
+    }
 }
