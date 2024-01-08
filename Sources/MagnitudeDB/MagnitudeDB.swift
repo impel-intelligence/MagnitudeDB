@@ -1,17 +1,25 @@
 import Foundation
 import SQLite
 import Accelerate
+import SQLite_swift_extensions
 
 public final class MagnitudeDB {    
-    public static let defaultDataURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!.appending(path: "MagnitudeDB").appending(component: "db").appendingPathExtension("sql")
+    private struct DatabaseMeta: Codable {
+        let isTrained: Bool
+    }
     
+    public static let defaultDataURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!.appending(path: "MagnitudeDB").appending(component: "db").appendingPathExtension("sql")
+    public static let defaultMetaURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!.appending(path: "MagnitudeDB").appending(component: "meta").appendingPathExtension("json")
+
     let dataURL: URL
+    let metaURL: URL
     
     @MainActor let db: Connection
     private var isTrained: Bool = false
     
-    public init(dataURL: URL = defaultDataURL, inMemory: Bool = false) {
+    public init(dataURL: URL = defaultDataURL, metaURL: URL = defaultMetaURL, inMemory: Bool = false) {
         self.dataURL = dataURL
+        self.metaURL = metaURL
         
         do {
             if inMemory {
@@ -59,6 +67,18 @@ public final class MagnitudeDB {
                 t.column(cell, references: cells, cellID)
                 t.column(collection, references: collections, collectionsID)
             })
+            
+            if !FileManager.default.fileExists(atPath: metaURL.path()) {
+                try FileManager.default.createDirectory(at: metaURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                
+                let empty = "[]"
+                try empty.write(toFile: metaURL.path(), atomically: true, encoding: .utf8)
+            }
+            
+            let seralizationBlob = try Data(contentsOf: metaURL)
+            let serializedMeta = try? JSONDecoder().decode(DatabaseMeta.self, from: seralizationBlob)
+
+            self.isTrained = serializedMeta?.isTrained ?? false
         } catch {
             print("Failed to create tables:", error)
         }
@@ -66,12 +86,20 @@ public final class MagnitudeDB {
             
     /// Implements a Pairwise Nearest Neighbor (PNN) method to generate a set of mean vectors used as Voronoi cell centroids
     public func train(targetCellCount: Int) throws {
+        guard !isTrained else { throw MagnitudeDBError.databaseAlreadyTrained }
+        
         let cellsTable = Table("cells")
         let documentsTable = Table("documents")
         let allDocuments: [Document] = try db.prepare(documentsTable).map({ return try $0.decode() })
         
         let allVectors = allDocuments.map({$0.embedding})
-        let reducedCells = recursiveCombination(allVectors: allVectors, targetCount: targetCellCount)
+
+        var reducedCells: [[Double]] = []
+        let reducedCellsTime = ContinuousClock().measure {
+            reducedCells = recursiveCombination(allVectors: allVectors, targetCount: targetCellCount)
+        }
+
+        print("Reducing Cells:", reducedCellsTime)
         
         var databaseCells: [Cell] = []
         for i in 0..<reducedCells.count {
@@ -82,25 +110,32 @@ public final class MagnitudeDB {
         // Save the cells to the DB
         try db.run(cellsTable.insertMany(databaseCells))
         
-        let cellColumn = Expression<Int?>("cell")
-        let documentID = Expression<Int>("id")
-        for document in allDocuments {
-            var closestCell: (Double, Cell?) = (.greatestFiniteMagnitude, nil)
-            
-            for cell in databaseCells {
-                var result: Double = 0
-                vDSP_distancesqD(cell.point, 1, document.embedding, 1, &result, vDSP_Length(cell.point.count))
+        let updatingClosestCellTimes = try ContinuousClock().measure {
+            let cellColumn = Expression<Int?>("cell")
+            let documentID = Expression<Int>("id")
+            for document in allDocuments {
+                var closestCell: (Double, Cell?) = (.greatestFiniteMagnitude, nil)
                 
-                if closestCell.0 > result {
-                    closestCell = (result, cell)
+                for cell in databaseCells {
+                    var result: Double = 0
+                    vDSP_distancesqD(cell.point, 1, document.embedding, 1, &result, vDSP_Length(cell.point.count))
+                    
+                    if closestCell.0 > result {
+                        closestCell = (result, cell)
+                    }
                 }
+                guard let closestCell = closestCell.1 else { continue }
+                
+                try db.run(documentsTable.filter(documentID == document.id).update(cellColumn <- closestCell.id))
             }
-            guard let closestCell = closestCell.1 else { continue }
-            
-            try db.run(documentsTable.filter(documentID == document.id).update(cellColumn <- closestCell.id))
         }
+
+        print("Updating Documents:", updatingClosestCellTimes)
         
         isTrained = true
+        
+        let serialzedMeta = try? JSONEncoder().encode(DatabaseMeta(isTrained: isTrained))
+        try serialzedMeta?.write(to: self.metaURL)
     }
     
     public func resetTraining() throws {

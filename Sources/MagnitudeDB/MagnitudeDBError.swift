@@ -12,4 +12,5 @@ enum MagnitudeDBError: LocalizedError {
     case collectionDoesNotExist
     case databaseNotTrained
     case noCellsFound
+    case databaseAlreadyTrained
 }
