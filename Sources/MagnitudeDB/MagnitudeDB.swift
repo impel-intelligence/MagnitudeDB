@@ -310,7 +310,17 @@ extension MagnitudeDB {
         var candidates: [(score: Double, document: Document)] = []
         
         for document in documents {
-            let result: Double = vDSP.distanceSquared(query, document.embedding)
+            // If the two documents are not the same sized vector the vDSP function will crash so we need to chop the vectors down to the correct size
+            var documentEmbeddings: [Double] = document.embedding
+            var query: [Double] = query
+            
+            if query.count < document.embedding.count {
+                documentEmbeddings.removeLast(documentEmbeddings.count - query.count)
+            } else if query.count > document.embedding.count {
+                query.removeLast(query.count - documentEmbeddings.count)
+            }
+            
+            let result: Double = vDSP.distanceSquared(query, documentEmbeddings)
             
             if !candidates.isEmpty {
                 for i in 0..<candidates.count {
