@@ -17,7 +17,7 @@ let package = Package(
     ], 
     dependencies: [
         .package(url: "https://github.com/stephencelis/SQLite.swift.git", from: "0.14.1"),
-        .package(url: "https://github.com/ActuallyTaylor/SQLite.swift.extensions.git", branch: "main"),
+        .package(url: "https://github.com/impel-intelligence/SQLite.swift.extensions.git", branch: "main"),
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
