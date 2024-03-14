@@ -393,9 +393,18 @@ extension MagnitudeDB {
     private func findNearestNeighbor(vector: [Double], neighbors: [[Double]]) -> ([Double], Int) {
         var closestDistance: Double = .greatestFiniteMagnitude
         var closestVectorIndex: Int = 0
-        
+        var neighbors = neighbors
         for i in 0..<neighbors.count {
-            let distance = vDSP.distanceSquared(vector, neighbors[i])
+            var neighborsValues = neighbors[i]
+            var vector = vector
+  
+            if vector.count < neighborsValues.count {
+                neighborsValues.removeLast(neighborsValues.count - vector.count)
+            } else if vector.count > neighborsValues.count {
+                vector.removeLast(vector.count - neighborsValues.count)
+            }
+            
+            let distance = vDSP.distanceSquared(vector, neighborsValues)
             
             if distance < closestDistance {
                 closestVectorIndex = i
