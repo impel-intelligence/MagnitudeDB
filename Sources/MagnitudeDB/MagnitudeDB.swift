@@ -118,7 +118,18 @@ public final class MagnitudeDB {
                 
                 for cell in databaseCells {
                     var result: Double = 0
-                    vDSP_distancesqD(cell.point, 1, document.embedding, 1, &result, vDSP_Length(cell.point.count))
+                    var cellPoints = cell.point
+                    var documentEmbeddings = document.embedding
+                    var count = cellPoints.count
+                    
+                    if cellPoints.count < documentEmbeddings.count {
+                        documentEmbeddings.removeLast(documentEmbeddings.count - cellPoints.count)
+                        count = documentEmbeddings.count
+                    } else {
+                        cellPoints.removeLast(cellPoints.count - documentEmbeddings.count)
+                    }
+                    
+                    vDSP_distancesqD(cellPoints, 1, documentEmbeddings, 1, &result, vDSP_Length(count))
                     
                     if closestCell.0 > result {
                         closestCell = (result, cell)
