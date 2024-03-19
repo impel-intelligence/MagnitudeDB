@@ -15,7 +15,7 @@ public final class MagnitudeDB {
     let metaURL: URL
     
     @MainActor let db: Connection
-    private var isTrained: Bool = false
+    public var isTrained: Bool = false
     
     public init(dataURL: URL = defaultDataURL, metaURL: URL = defaultMetaURL, inMemory: Bool = false) {
         self.dataURL = dataURL
@@ -30,7 +30,7 @@ public final class MagnitudeDB {
         } catch {
             self.db = try! Connection(.temporary)
         }
-        
+                
         do {
             // MARK: Create the cells table
             let cells = Table("cells")
@@ -404,7 +404,7 @@ extension MagnitudeDB {
     private func findNearestNeighbor(vector: [Double], neighbors: [[Double]]) -> ([Double], Int) {
         var closestDistance: Double = .greatestFiniteMagnitude
         var closestVectorIndex: Int = 0
-        var neighbors = neighbors
+
         for i in 0..<neighbors.count {
             var neighborsValues = neighbors[i]
             var vector = vector
