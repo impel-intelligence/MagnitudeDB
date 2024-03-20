@@ -11,42 +11,29 @@ let package = Package(
     ],
     products: [
         // Products define the executables and libraries a package produces, making them visible to other packages.
-        .library(name: "MagnitudeDB", targets: ["MagnitudeDB"]),
-        .library(name: "MagnitudeFAISS", targets: ["MagnitudeFAISS"])
+        .library(name: "MagnitudeDB", targets: ["MagnitudeDB"])
     ],
     dependencies: [
         .package(url: "https://github.com/stephencelis/SQLite.swift.git", from: "0.14.1"),
         .package(url: "https://github.com/impel-intelligence/SQLite.swift.extensions.git", branch: "main"),
-        .package(url: "https://github.com/DeveloperMindset-com/faiss-mobile", branch: "master"),
-        .package(url: "https://github.com/DeveloperMindset-com/openmp-mobile", branch: "master")
+        .package(url: "https://github.com/impel-intelligence/SwiftFaiss.git", from: "0.2.0"),
+        .package(url: "https://github.com/swiftcsv/SwiftCSV.git", from: "0.8.0"),
+        .package(url: "https://github.com/realm/SwiftLint.git", branch: "main")
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
         // Targets can depend on other targets in this package and products from dependencies.
         .target(
-            name: "MagnitudeDB", dependencies: [
-                .product(name: "SQLite", package: "SQLite.swift"),
-                .product(name: "FAISS_C", package: "faiss-mobile"),
-                .product(name: "OpenMP", package: "openmp-mobile"),
-                "SQLite.swift.extensions",
-                "MagnitudeFAISS"
-            ], swiftSettings: [
-                .interoperabilityMode(.Cxx)
-            ]),
-        .target(
-            name: "MagnitudeFAISS",
+            name: "MagnitudeDB", 
             dependencies: [
-                .product(name: "FAISS", package: "faiss-mobile"),
-                .product(name: "OpenMP", package: "openmp-mobile"),
-            ], cxxSettings: [
-                .unsafeFlags(["-std=c++11"])
+                .product(name: "SQLite", package: "SQLite.swift"),
+                "SQLite.swift.extensions",
+                "SwiftFaiss"
+            ],
+            plugins: [
+                .plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLint")
             ]
         ),
-        .testTarget(
-            name: "MagnitudeDBTests",
-            dependencies: ["MagnitudeDB"], 
-            swiftSettings: [
-                .interoperabilityMode(.Cxx)
-            ])
+        .testTarget(name: "MagnitudeDBTests", dependencies: ["MagnitudeDB", "SwiftCSV"])
     ]
 )

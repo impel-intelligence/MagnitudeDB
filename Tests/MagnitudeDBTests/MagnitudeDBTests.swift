@@ -1,7 +1,9 @@
 import XCTest
+import SwiftCSV
 @testable import MagnitudeDB
 
 final class MagnitudeDBTests: XCTestCase {
+    
     override class func setUp() {
         load()
     }
@@ -11,19 +13,42 @@ final class MagnitudeDBTests: XCTestCase {
     }
     
     private func load() {
-//        let baseLocation = URL(fileURLWithPath: #file, isDirectory: false).deletingLastPathComponent()
-//        let dbLocation = baseLocation.appendingPathComponent("Resources", conformingTo: .directory).appendingPathComponent("vector_database_wikipedia_articles_embedded.csv")
         /*
          Load CSV
          Vector Dimensions: 1536
          Format:
-         id    url    title    text    content_vector
+         id,url,title,text,title_vector,content_vector,vector_id
          */
     }
     
-    func testFAISS() {
-        let faiss = MagnitudeFAISSDB(vectorDimensions: 1536, numberOfNeighbors: 32)
+    func testLoadDatabase() throws {
+        let baseLocation = URL(fileURLWithPath: #file, isDirectory: false).deletingLastPathComponent()
+        let dbLocation = baseLocation.appendingPathComponent("Resources", conformingTo: .directory)
+        
+        if FileManager.default.fileExists(atPath: dbLocation.path(percentEncoded: false)) {
+            try FileManager.default.removeItem(at: dbLocation)
+        }
 
-         
+        let csvLocation = baseLocation.appendingPathComponent("Resources", conformingTo: .directory).appendingPathComponent("xaa")
+
+        let csv = try EnumeratedCSV(url: csvLocation, loadColumns: false)
+        
+        let database = try MagnitudeDatabase(vectorDimensions: 1534, dataURL: dbLocation)
+                
+        let collection = try database.createCollection("xaa")
+        
+        for item in csv.rows {
+            let content = item[3]
+            let vectorString = item[5]
+            let vector = vectorString.split(separator: ",").compactMap({
+                return Float($0.trimmingCharacters(in: .whitespaces))
+            })
+            
+            guard !vector.isEmpty else { break }
+            try database.createDocument(collection: collection, content: content, embedding: vector)
+        }
+        
+        let results = try database.search(query: TestEmbeddings.marchTitle, amount: 2)
+        print(results.map({$0.content}))
     }
 }

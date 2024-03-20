@@ -9,8 +9,9 @@ import Foundation
 
 public struct Document: Codable {
     let id: Int
+    public let vectorID: Int
     public let content: String
-    public let embedding: [Double]
+    public let embedding: [Float]
     public let collection: Int
     var cell: Int?
 }
