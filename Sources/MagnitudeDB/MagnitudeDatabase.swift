@@ -28,7 +28,7 @@ public class MagnitudeDatabase {
     
     // Static
     private static let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-    private static let defaultDataURL = documentsDirectory.appending(path: "magnitude")
+    public static let defaultDataURL = documentsDirectory.appending(path: "magnitude")
     
     private let dataURL: URL
     
@@ -42,9 +42,9 @@ public class MagnitudeDatabase {
     
     // Database
     @MainActor let db: Connection
-    var vectorDimensions: Int
+    private var vectorDimensions: Int
         
-    init(vectorDimensions: Int, dataURL: URL = defaultDataURL, inMemory: Bool = false) throws {
+    public init(vectorDimensions: Int, dataURL: URL = defaultDataURL, inMemory: Bool = false) throws {
         self.vectorDimensions = vectorDimensions
         self.dataURL = dataURL
         let databaseURL = dataURL.appending(component: "data").appendingPathExtension(".sql")
