@@ -1,9 +1,13 @@
 import Foundation
-import MagnitudeFAISS
+import SwiftFaiss
 
 class MagnitudeFAISSDB {
     
     init() {
+        
+    }
+    
+    func test() {
         
     }
 }
