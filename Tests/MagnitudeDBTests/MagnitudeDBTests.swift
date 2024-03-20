@@ -1,14 +1,7 @@
 import XCTest
 @testable import MagnitudeDB
 
-fileprivate struct SavedEmbeddingsData: Codable {
-    var content: String
-    var embeddings: [Double]
-}
-
 final class MagnitudeDBTests: XCTestCase {
-    var database: MagnitudeDB!
-    
     override class func setUp() {
         load()
     }
@@ -18,8 +11,8 @@ final class MagnitudeDBTests: XCTestCase {
     }
     
     private func load() {
-        let baseLocation = URL(fileURLWithPath: #file, isDirectory: false).deletingLastPathComponent()
-        let dbLocation = baseLocation.appendingPathComponent("Resources", conformingTo: .directory).appendingPathComponent("vector_database_wikipedia_articles_embedded.csv")
+//        let baseLocation = URL(fileURLWithPath: #file, isDirectory: false).deletingLastPathComponent()
+//        let dbLocation = baseLocation.appendingPathComponent("Resources", conformingTo: .directory).appendingPathComponent("vector_database_wikipedia_articles_embedded.csv")
         /*
          Load CSV
          Vector Dimensions: 1536
@@ -29,7 +22,8 @@ final class MagnitudeDBTests: XCTestCase {
     }
     
     func testFAISS() {
-        let faiss = MagnitudeFAISSDB()
-        faiss.test()
+        let faiss = MagnitudeFAISSDB(vectorDimensions: 1536, numberOfNeighbors: 32)
+
+         
     }
 }
