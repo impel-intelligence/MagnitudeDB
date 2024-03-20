@@ -28,15 +28,15 @@ public class MagnitudeDatabase {
     
     // Static
     private static let documentsDirectory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-    public static let defaultDataURL = documentsDirectory.appending(path: "magnitude")
+    private static let defaultDataURL = documentsDirectory.appending(path: "magnitude")
     
-    let dataURL: URL
+    private let dataURL: URL
     
-    var databaseURL: URL {
+    private var databaseURL: URL {
         dataURL.appending(component: "data").appendingPathExtension(".sql")
     }
     
-    var indexCache: URL {
+    private var indexCache: URL {
         dataURL.appending(path: "index_cache").appending(component: "data").appendingPathExtension(".sql")
     }
     
@@ -49,41 +49,37 @@ public class MagnitudeDatabase {
         self.dataURL = dataURL
         let databaseURL = dataURL.appending(component: "data").appendingPathExtension(".sql")
         
-        do {
-            if inMemory {
-                self.db = try Connection(.temporary)
-            } else {
-                self.db = try Connection(databaseURL.path())
-            }
-
-            // Create the collections table
-            let collections = Table("collections")
-            let collectionsID = Expression<Int>("id")
-            let collectionsName = Expression<String>("name")
-
-            try db.run(collections.create(ifNotExists: true) { t in
-                t.column(collectionsID, primaryKey: .autoincrement)
-                t.column(collectionsName, unique: true)
-            })
-            
-            // Create the documents table
-            let documents = Table("documents")
-            let documentID = Expression<Int>("id")
-            let vectorID = Expression<Int>("vectorID")
-            let content = Expression<String>("content")
-            let embedding = Expression<[Float]>("embedding")
-            let collection = Expression<Int>("collection")
-            
-            try db.run(documents.create(ifNotExists: true) { t in
-                t.column(documentID, primaryKey: .autoincrement)
-                t.column(vectorID)
-                t.column(content)
-                t.column(embedding)
-                t.column(collection, references: collections, collectionsID)
-            })
-        } catch {
-            throw DBError.couldNotBuildDB
+        if inMemory {
+            self.db = try Connection(.temporary)
+        } else {
+            self.db = try Connection(databaseURL.path())
         }
+
+        // Create the collections table
+        let collections = Table("collections")
+        let collectionsID = Expression<Int>("id")
+        let collectionsName = Expression<String>("name")
+
+        try db.run(collections.create(ifNotExists: true) { t in
+            t.column(collectionsID, primaryKey: .autoincrement)
+            t.column(collectionsName, unique: true)
+        })
+        
+        // Create the documents table
+        let documents = Table("documents")
+        let documentID = Expression<Int>("id")
+        let vectorID = Expression<Int>("vectorID")
+        let content = Expression<String>("content")
+        let embedding = Expression<[Float]>("embedding")
+        let collection = Expression<Int>("collection")
+        
+        try db.run(documents.create(ifNotExists: true) { t in
+            t.column(documentID, primaryKey: .autoincrement)
+            t.column(vectorID)
+            t.column(content)
+            t.column(embedding)
+            t.column(collection, references: collections, collectionsID)
+        })
     }
 }
 
@@ -159,7 +155,7 @@ extension MagnitudeDatabase {
             try FileManager.default.removeItem(at: location)
             
             // TODO: Optomize to edit the existing cache instead of deleting and then re-generating later
-            // Because all collections are in the global index we need
+            // Because all collections are in the global index we need to invalide invalidate it
             try self.invalidateCache(area: .all)
         }
     }
