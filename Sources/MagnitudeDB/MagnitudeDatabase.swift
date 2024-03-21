@@ -33,11 +33,11 @@ public class MagnitudeDatabase {
     private let dataURL: URL
     
     private var databaseURL: URL {
-        dataURL.appending(component: "data").appendingPathExtension(".sql")
+        dataURL.appending(component: "data").appendingPathExtension("sql")
     }
     
     private var indexCache: URL {
-        dataURL.appending(path: "index_cache").appending(component: "data").appendingPathExtension(".sql")
+        dataURL.appending(path: "index_cache")
     }
     
     // Database
@@ -47,8 +47,12 @@ public class MagnitudeDatabase {
     public init(vectorDimensions: Int, dataURL: URL = defaultDataURL, inMemory: Bool = false) throws {
         self.vectorDimensions = vectorDimensions
         self.dataURL = dataURL
-        let databaseURL = dataURL.appending(component: "data").appendingPathExtension(".sql")
-        
+        if !FileManager.default.fileExists(atPath: dataURL.path(percentEncoded: false)) {
+            try FileManager.default.createDirectory(at: dataURL, withIntermediateDirectories: true)
+        }
+
+        let databaseURL = dataURL.appending(component: "data").appendingPathExtension("sql")
+
         if inMemory {
             self.db = try Connection(.temporary)
         } else {
@@ -68,18 +72,20 @@ public class MagnitudeDatabase {
         // Create the documents table
         let documents = Table("documents")
         let documentID = Expression<Int>("id")
-        let vectorID = Expression<Int>("vectorID")
         let content = Expression<String>("content")
         let embedding = Expression<[Float]>("embedding")
         let collection = Expression<Int>("collection")
         
         try db.run(documents.create(ifNotExists: true) { t in
             t.column(documentID, primaryKey: .autoincrement)
-            t.column(vectorID)
             t.column(content)
             t.column(embedding)
             t.column(collection, references: collections, collectionsID)
         })
+        
+        if !FileManager.default.fileExists(atPath: indexCache.path(percentEncoded: false)) {
+            try FileManager.default.createDirectory(at: indexCache, withIntermediateDirectories: true)
+        }
     }
 }
 
@@ -117,6 +123,10 @@ extension MagnitudeDatabase {
             try index.train(results.0)
             try index.add(results.0)
             
+            if !FileManager.default.fileExists(atPath: indexURL.path(percentEncoded: false)) {
+                FileManager.default.createFile(atPath: indexURL.path(percentEncoded: false), contents: nil)
+            }
+            
             // Cache the index so we do not need to reconstruct it in the future
             try index.saveToFile(indexURL.path(percentEncoded: false))
             
@@ -138,6 +148,10 @@ extension MagnitudeDatabase {
             try index.train(results.0)
             try index.add(results.0)
             
+            if !FileManager.default.fileExists(atPath: indexURL.path(percentEncoded: false)) {
+                FileManager.default.createFile(atPath: indexURL.path(percentEncoded: false), contents: nil)
+            }
+
             // Cache the index so we do not need to reconstruct it in the future
             try index.saveToFile(indexURL.path(percentEncoded: false))
             
@@ -149,10 +163,15 @@ extension MagnitudeDatabase {
         switch area {
         case .all:
             let location = cacheURL(for: .all)
-            try FileManager.default.removeItem(at: location)
+            if FileManager.default.fileExists(atPath: location.path(percentEncoded: false)) {
+                try FileManager.default.removeItem(at: location)
+            }
+
         case .collection:
             let location = cacheURL(for: area)
-            try FileManager.default.removeItem(at: location)
+            if FileManager.default.fileExists(atPath: location.path(percentEncoded: false)) {
+                try FileManager.default.removeItem(at: location)
+            }
             
             // TODO: Optomize to edit the existing cache instead of deleting and then re-generating later
             // Because all collections are in the global index we need to invalide invalidate it
@@ -213,12 +232,24 @@ extension MagnitudeDatabase {
         return collection
     }
     
+    // The following to functions are SLOW we need to optomize them somehow
     private func getAllEmbeddings() throws -> ([[Float]], [Document]) {
         let documentsTable = Table("documents")
         
-        let documents: [Document] = try db.prepare(documentsTable).map({try $0.decode()})
-        let vectors: [[Float]] = documents.map({$0.embedding})
+        var vectors: [[Float]] = []
+        var documents: [Document] = []
+
+        let clock = ContinuousClock()
+        let result = try clock.measure {
+            for raw in try db.prepare(documentsTable) {
+                let document: Document = try raw.decode()
+                vectors.append(document.embedding)
+                documents.append(document)
+            }
+        }
         
+        print(result)
+
         return (vectors, documents)
     }
     
@@ -227,9 +258,14 @@ extension MagnitudeDatabase {
         let collection = Expression<Int>("collection")
         let databaseQuery = documentTable.filter(collection == collec.id)
         
-        let documents: [Document] = try db.prepare(databaseQuery).map({try $0.decode()})
-        let vectors: [[Float]] = documents.map({$0.embedding})
-        
+        var vectors: [[Float]] = []
+        var documents: [Document] = []
+        for raw in try db.prepare(databaseQuery) {
+            let document: Document = try raw.decode()
+            vectors.append(document.embedding)
+            documents.append(document)
+        }
+
         return (vectors, documents)
     }
 }

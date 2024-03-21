@@ -25,28 +25,24 @@ final class MagnitudeDBTests: XCTestCase {
         let baseLocation = URL(fileURLWithPath: #file, isDirectory: false).deletingLastPathComponent()
         let dbLocation = baseLocation.appendingPathComponent("Resources", conformingTo: .directory)
         
-        if FileManager.default.fileExists(atPath: dbLocation.path(percentEncoded: false)) {
-            try FileManager.default.removeItem(at: dbLocation)
-        }
+        let csvLocation = baseLocation.appendingPathComponent("Resources", conformingTo: .directory).appendingPathComponent("vector_database_wikipedia_articles_embedded.csv")
 
-        let csvLocation = baseLocation.appendingPathComponent("Resources", conformingTo: .directory).appendingPathComponent("xaa")
-
-        let csv = try EnumeratedCSV(url: csvLocation, loadColumns: false)
+//        let csv = try EnumeratedCSV(url: csvLocation, delimiter: .comma, loadColumns: false)
         
         let database = try MagnitudeDatabase(vectorDimensions: 1534, dataURL: dbLocation)
                 
-        let collection = try database.createCollection("xaa")
+//        let collection = try database.createCollection("all")
         
-        for item in csv.rows {
-            let content = item[3]
-            let vectorString = item[5]
-            let vector = vectorString.split(separator: ",").compactMap({
-                return Float($0.trimmingCharacters(in: .whitespaces))
-            })
-            
-            guard !vector.isEmpty else { break }
-            try database.createDocument(collection: collection, content: content, embedding: vector)
-        }
+//        for item in csv.rows {
+//            let content = item[3]
+//            let vectorString = item[5]
+//            let vector = vectorString.split(separator: ",").compactMap({
+//                return Float($0.trimmingCharacters(in: .whitespaces))
+//            })
+//            
+//            guard !vector.isEmpty else { break }
+//            try database.createDocument(collection: collection, content: content, embedding: vector)
+//        }
         
         let results = try database.search(query: TestEmbeddings.marchTitle, amount: 2)
         print(results.map({$0.content}))
