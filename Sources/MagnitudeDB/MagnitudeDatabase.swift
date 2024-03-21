@@ -41,7 +41,7 @@ public class MagnitudeDatabase {
     }
     
     // Database
-    @MainActor let db: Connection
+    private let db: Connection
     private var vectorDimensions: Int
         
     public init(vectorDimensions: Int, dataURL: URL = defaultDataURL, inMemory: Bool = false) throws {
@@ -58,7 +58,7 @@ public class MagnitudeDatabase {
         } else {
             self.db = try Connection(databaseURL.path())
         }
-
+        
         // Create the collections table
         let collections = Table("collections")
         let collectionsID = Expression<Int>("id")
@@ -100,28 +100,19 @@ extension MagnitudeDatabase {
         
         return result.labels.flatMap({$0})
     }
-    
-    private func retrieveIndex(area: IndexArea) throws -> IndexPackage {
-        switch area {
-        case .all:
-            return try retrieveIndexAll()
-        case .collection(let collection):
-            return try retrieveIndex(for: collection)
-        }
-    }
-    
+        
     private func retrieveIndexAll() throws -> IndexPackage {
         let indexURL = cacheURL(for: .all)
         let results = try getAllEmbeddings()
 
         if let cachedIndex = try? IVFFlatIndex.from(indexURL.path(percentEncoded: false)) {
-            return IndexPackage(index: cachedIndex, documents: results.1)
+            return IndexPackage(index: cachedIndex, documents: results.documents)
         } else {
             let quantizer: FlatIndex = try FlatIndex(d: self.vectorDimensions, metricType: .l2)
             let index: IVFFlatIndex = try IVFFlatIndex(quantizer: quantizer, d: self.vectorDimensions, nlist: 2)
             
-            try index.train(results.0)
-            try index.add(results.0)
+            try index.train(results.vectors)
+            try index.add(results.vectors)
             
             if !FileManager.default.fileExists(atPath: indexURL.path(percentEncoded: false)) {
                 FileManager.default.createFile(atPath: indexURL.path(percentEncoded: false), contents: nil)
@@ -130,7 +121,7 @@ extension MagnitudeDatabase {
             // Cache the index so we do not need to reconstruct it in the future
             try index.saveToFile(indexURL.path(percentEncoded: false))
             
-            return IndexPackage(index: index, documents: results.1)
+            return IndexPackage(index: index, documents: results.documents)
         }
         
     }
@@ -140,13 +131,13 @@ extension MagnitudeDatabase {
         let results = try getEmbeddings(for: collection)
 
         if let cachedIndex = try? IVFFlatIndex.from(indexURL.path(percentEncoded: false)) {
-            return IndexPackage(index: cachedIndex, documents: results.1)
+            return IndexPackage(index: cachedIndex, documents: results.documents)
         } else {
             let quantizer: FlatIndex = try FlatIndex(d: self.vectorDimensions, metricType: .l2)
             let index: IVFFlatIndex = try IVFFlatIndex(quantizer: quantizer, d: self.vectorDimensions, nlist: 2)
             
-            try index.train(results.0)
-            try index.add(results.0)
+            try index.train(results.vectors)
+            try index.add(results.vectors)
             
             if !FileManager.default.fileExists(atPath: indexURL.path(percentEncoded: false)) {
                 FileManager.default.createFile(atPath: indexURL.path(percentEncoded: false), contents: nil)
@@ -155,7 +146,7 @@ extension MagnitudeDatabase {
             // Cache the index so we do not need to reconstruct it in the future
             try index.saveToFile(indexURL.path(percentEncoded: false))
             
-            return IndexPackage(index: index, documents: results.1)
+            return IndexPackage(index: index, documents: results.documents)
         }
     }
     
@@ -196,7 +187,7 @@ extension MagnitudeDatabase {
         let documentID = Expression<Int>("id")
         
         let nextID = (try db.scalar(documents.select(documentID.max)) ?? 0) + 1
-        let document = Document(id: nextID, vectorID: 0, content: content, embedding: embedding, collection: collection.id)
+        let document = Document(id: nextID, content: content, embedding: embedding, collection: collection.id)
         
         try db.run(documents.insert(document))
         try invalidateCache(area: .collection(collection: collection))
@@ -233,7 +224,7 @@ extension MagnitudeDatabase {
     }
     
     // The following to functions are SLOW we need to optomize them somehow
-    private func getAllEmbeddings() throws -> ([[Float]], [Document]) {
+    private func getAllEmbeddings() throws -> (vectors: [[Float]], documents: [Document]) {
         let documentsTable = Table("documents")
         
         var vectors: [[Float]] = []
@@ -245,10 +236,10 @@ extension MagnitudeDatabase {
             documents.append(document)
         }
 
-        return (vectors, documents)
+        return (vectors: vectors, documents: documents)
     }
     
-    private func getEmbeddings(for collec: Collection) throws -> ([[Float]], [Document]) {
+    private func getEmbeddings(for collec: Collection) throws -> (vectors: [[Float]], documents: [Document]) {
         let documentTable = Table("documents")
         let collection = Expression<Int>("collection")
         let databaseQuery = documentTable.filter(collection == collec.id)
@@ -261,7 +252,7 @@ extension MagnitudeDatabase {
             documents.append(document)
         }
 
-        return (vectors, documents)
+        return (vectors: vectors, documents: documents)
     }
 }
 
@@ -276,7 +267,7 @@ extension MagnitudeDatabase {
     }
     
     public func search(in collection: Collection, query: [Float], amount: Int) throws -> [Document] {
-        let indexPackage = try retrieveIndexAll()
+        let indexPackage = try retrieveIndex(for: collection)
         let labels = try self.searchIndex(index: indexPackage.index, query: query, amount: amount)
         let resultingDocuments = try translateLabels(labels: labels, documents: indexPackage.documents)
         
@@ -286,7 +277,8 @@ extension MagnitudeDatabase {
     private func translateLabels(labels: [Int], documents: [Document]) throws -> [Document] {
         var resultingDocuments: [Document] = []
         
-        for index in labels where (index < documents.count && index >= 0) {
+        let documentsCount = documents.count
+        for index in labels where (index < documentsCount && index >= 0) {
             resultingDocuments.append(documents[index])
         }
 

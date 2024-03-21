@@ -70,4 +70,6 @@ final class MagnitudeDBTests: XCTestCase {
         let results = try database.search(query: TestEmbeddings.marchTitle, amount: 2)
         XCTAssert(results.count == 2)
     }
+    
+    // TODO: Add performance testing
 }
