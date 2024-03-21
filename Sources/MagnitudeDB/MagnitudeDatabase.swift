@@ -239,16 +239,11 @@ extension MagnitudeDatabase {
         var vectors: [[Float]] = []
         var documents: [Document] = []
 
-        let clock = ContinuousClock()
-        let result = try clock.measure {
-            for raw in try db.prepare(documentsTable) {
-                let document: Document = try raw.decode()
-                vectors.append(document.embedding)
-                documents.append(document)
-            }
+        for raw in try db.prepare(documentsTable) {
+            let document: Document = try raw.decode()
+            vectors.append(document.embedding)
+            documents.append(document)
         }
-        
-        print(result)
 
         return (vectors, documents)
     }
