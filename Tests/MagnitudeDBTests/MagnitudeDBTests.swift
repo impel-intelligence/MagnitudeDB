@@ -29,7 +29,7 @@ final class MagnitudeDBTests: XCTestCase {
             let collection = try database.createCollection("all")
             let csv = try EnumeratedCSV(url: csvLocation, delimiter: .comma, loadColumns: false)
 
-            for item in csv.rows {
+            for (index, item) in csv.rows.enumerated() {
                 let content = item[3]
                 let vectorString = item[5]
                 let vector = vectorString.split(separator: ",").compactMap({
@@ -37,7 +37,9 @@ final class MagnitudeDBTests: XCTestCase {
                 })
                 
                 guard !vector.isEmpty else { break }
+                print("Creating document \(index)")
                 try database.createDocument(collection: collection, content: content, embedding: vector)
+                print("Createdt document \(index)")
             }
         }
     }
@@ -68,6 +70,7 @@ final class MagnitudeDBTests: XCTestCase {
         }
         
         let results = try database.search(query: TestEmbeddings.marchTitle, amount: 2)
+        print(results)
         XCTAssert(results.count == 2)
     }
     

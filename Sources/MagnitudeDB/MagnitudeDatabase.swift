@@ -95,7 +95,7 @@ extension MagnitudeDatabase {
         guard index.isTrained else {
             throw DBError.indexNotTrained
         }
-        
+                
         let result = try index.search([query], k: amount)
         
         return result.labels.flatMap({$0})
@@ -133,8 +133,7 @@ extension MagnitudeDatabase {
         if let cachedIndex = try? IVFFlatIndex.from(indexURL.path(percentEncoded: false)) {
             return IndexPackage(index: cachedIndex, documents: results.documents)
         } else {
-            let quantizer: FlatIndex = try FlatIndex(d: self.vectorDimensions, metricType: .l2)
-            let index: IVFFlatIndex = try IVFFlatIndex(quantizer: quantizer, d: self.vectorDimensions, nlist: 2)
+            let index: FlatIndex = try FlatIndex(d: self.vectorDimensions, metricType: .l2)
             
             try index.train(results.vectors)
             try index.add(results.vectors)
@@ -186,6 +185,9 @@ extension MagnitudeDatabase {
         let documents = Table("documents")
         let documentID = Expression<Int>("id")
         
+        var embedding = embedding
+        faiss_fvec_renorm_L2(vectorDimensions, 1, &embedding)
+
         let nextID = (try db.scalar(documents.select(documentID.max)) ?? 0) + 1
         let document = Document(id: nextID, content: content, embedding: embedding, collection: collection.id)
         
@@ -259,6 +261,9 @@ extension MagnitudeDatabase {
 // MARK: Search
 extension MagnitudeDatabase {
     public func search(query: [Float], amount: Int) throws -> [Document] {
+        var query = query
+        faiss_fvec_renorm_L2(vectorDimensions, 1, &query)
+
         let indexPackage = try retrieveIndexAll()
         let labels = try self.searchIndex(index: indexPackage.index, query: query, amount: amount)
         let resultingDocuments = try translateLabels(labels: labels, documents: indexPackage.documents)
@@ -267,6 +272,9 @@ extension MagnitudeDatabase {
     }
     
     public func search(in collection: Collection, query: [Float], amount: Int) throws -> [Document] {
+        var query = query
+        faiss_fvec_renorm_L2(vectorDimensions, 1, &query)
+
         let indexPackage = try retrieveIndex(for: collection)
         let labels = try self.searchIndex(index: indexPackage.index, query: query, amount: amount)
         let resultingDocuments = try translateLabels(labels: labels, documents: indexPackage.documents)
