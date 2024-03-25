@@ -225,6 +225,28 @@ extension MagnitudeDatabase {
         return collection
     }
     
+    /// Allows you to normalize an exisiting database into the new normalized format.
+    @discardableResult
+    public func normalizeDatabase() throws -> Int {
+        let documentsTable = Table("documents")
+        var numberNormalized = 0
+        
+        for raw in try db.prepare(documentsTable) {
+            var document: Document = try raw.decode()
+            guard document.embedding.contains(where: { $0 > 1 }) else {
+                continue // Already normalized
+            }
+            
+            faiss_fvec_renorm_L2(vectorDimensions, 1, &document.embedding)
+            
+            _ = try documentsTable.update(document)
+            numberNormalized += 1
+            print("Normalized \(document.id)")
+        }
+        
+        return numberNormalized
+    }
+    
     // The following to functions are SLOW we need to optomize them somehow
     private func getAllEmbeddings() throws -> (vectors: [[Float]], documents: [Document]) {
         let documentsTable = Table("documents")
