@@ -51,7 +51,7 @@ public class MagnitudeDatabase {
             try FileManager.default.createDirectory(at: dataURL, withIntermediateDirectories: true)
         }
 
-        let databaseURL = dataURL.appending(component: "data").appendingPathExtension("sql")
+        let databaseURL = dataURL.appending(component: "vectorDB").appendingPathExtension("sqlite")
 
         if inMemory {
             self.db = try Connection(.temporary)
