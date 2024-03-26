@@ -10,7 +10,7 @@ import Foundation
 public struct Document: Codable {
     let id: Int
     public let content: String
-    public let embedding: [Double]
+    public var embedding: [Float]
     public let collection: Int
     var cell: Int?
 }

@@ -1,123 +1,70 @@
 import XCTest
+import SwiftCSV
 @testable import MagnitudeDB
 
-fileprivate struct SavedEmbeddingsData: Codable {
-    var content: String
-    var embeddings: [Double]
-}
-
 final class MagnitudeDBTests: XCTestCase {
-    var database: MagnitudeDB!
     
     override class func setUp() {
-        print("Running Setup")
-        let baseLocation = URL(fileURLWithPath: #file, isDirectory: false).deletingLastPathComponent()
-        let dbLocation = baseLocation.appendingPathComponent("Resources", conformingTo: .directory).appendingPathComponent("data.sql")
-        let metaLocation = baseLocation.appendingPathComponent("Resources", conformingTo: .directory).appendingPathComponent("meta.json")
-
-//        try? FileManager.default.removeItem(at: dbLocation)
-
-        let database = MagnitudeDB(dataURL: dbLocation, metaURL: metaLocation)
-
-//        var outputDirectory = URL(fileURLWithPath: #file, isDirectory: false).deletingLastPathComponent()
-//        outputDirectory = outputDirectory.appendingPathComponent("Resources", conformingTo: .directory).appendingPathComponent("output", conformingTo: .directory)
-//
-//        do {
-//            let files = try FileManager.default.contentsOfDirectory(atPath: outputDirectory.path())
-//            let collection = try database.createCollection("wikipedia")
-//            
-//            for file in files {
-//                guard file != ".DS_Store" else { continue }
-//                do {
-//                    let fileURL = outputDirectory.appending(path: file)
-//                    let fileBlob = try Data(contentsOf: fileURL)
-//                    let tmp = try JSONDecoder().decode(SavedEmbeddingsData.self, from: fileBlob)
-//                    
-//                    try database.createDocument(collection: collection, content: tmp.content, embedding: tmp.embeddings)
-//                } catch {
-//                    print("(\(file)) Failed to retrieve:", error)
-//                }
-//            }
-//        } catch {
-//            print("Failed to initialize database", error)
-//        }
-        
         do {
-            print("Reset Database")
-            try database.resetTraining()
-            print("Training Database")
-            try database.train(targetCellCount: 64)
+            try loadDB()
         } catch {
-            print("Failed to train database")
+            XCTFail("Could not setup database \(error)")
         }
     }
     
     override func setUp() async throws {
+        try MagnitudeDBTests.loadDB()
+    }
+    
+    private static func loadDB() throws {
         let baseLocation = URL(fileURLWithPath: #file, isDirectory: false).deletingLastPathComponent()
-        let dbLocation = baseLocation.appendingPathComponent("Resources", conformingTo: .directory).appendingPathComponent("data.sql")
-        let metaLocation = baseLocation.appendingPathComponent("Resources", conformingTo: .directory).appendingPathComponent("meta.json")
-
-        database = MagnitudeDB(dataURL: dbLocation, metaURL: metaLocation)
-    }
+        let dbLocation = baseLocation.appendingPathComponent("Resources", conformingTo: .directory)
         
-//    func testReadWikipediaCollection() async throws {
-//        let collection = try database.getCollection("wikipedia")
-//        let documents = try database.getAllDocuments(in: collection)
-//        XCTAssert(documents.count == 4857)
-//    }
-//    
-//    func testReadEmptyCollection() async throws {
-//        let collection = try database.createCollection("woah")
-//        let documents = try database.getAllDocuments(in: collection)
-//        XCTAssert(documents.count == 0)
-//    }
-    
-//    func testDotProductSearch() async throws {
-//        let collection = try database.getCollection("wikipedia")
-//        let embedding = TestEmbeddings.searchText
-//        
-//        print("Dot Product Search")
-//        let _ = try database.dotProductSearch(query: embedding, collection: collection)
-//    }
-//    
-//    func testCosineSearch() async throws {
-//        let collection = try database.getCollection("wikipedia")
-//        let embedding = TestEmbeddings.searchText
-//        
-//        print("Cosine Search")
-//        let _ = try database.dotProductSearch(query: embedding, collection: collection)
-//    }
-//    
-//    func testEuclidianDistanceSearch() async throws {
-//        let collection = try database.getCollection("wikipedia")
-//        let embedding = TestEmbeddings.searchText
-//        
-//        print("Euclidian Distance Search")
-//        let _ = try database.euclidianDistanceSearch(query: embedding, collection: collection)
-//    }
-    
-    func testVoronoiSearch() async throws {
-        let collection = try database.getCollection("wikipedia")
-        let embedding = TestEmbeddings.searchText
+        let database = try MagnitudeDatabase(vectorDimensions: 1534, dataURL: dbLocation)
                 
-        print("Voronoi Search")
-        let _ = try database.voronoiSearch(query: embedding, collection: collection)
+        if (try? database.getCollection("all")) == nil {
+            let csvLocation = baseLocation.appendingPathComponent("Resources", conformingTo: .directory).appendingPathComponent("vector_database_wikipedia_articles_embedded.csv")
+
+            // There is no data loaded so we need to load it all. This takes a WHILE so be careful.
+            let collection = try database.createCollection("all")
+            let csv = try EnumeratedCSV(url: csvLocation, delimiter: .comma, loadColumns: false)
+
+            for (index, item) in csv.rows.enumerated() {
+                let content = item[3]
+                let vectorString = item[5]
+                let vector = vectorString.split(separator: ",").compactMap({
+                    return Float($0.trimmingCharacters(in: .whitespaces))
+                })
+                
+                guard !vector.isEmpty else { break }
+                print("Creating document \(index)")
+                try database.createDocument(collection: collection, content: content, embedding: vector)
+                print("Created document \(index)")
+            }
+        }
     }
     
-//    func testVoronoiSearchNoTraining() async throws {
-//        let collection = try database.getCollection("wikipedia")
-//        let embedding = TestEmbeddings.searchText
-//
-//        print("Reset Training")
-//        try database.resetTraining()
-//
-//        print("Voronoi Search")
-//        XCTAssertThrowsError(try database.voronoiSearch(query: embedding, collection: collection))
-//    }
-//
-//    func testDeleteCollection() async throws {
-//        let collection = try database.createCollection("This is so cool")
-//        try database.deleteCollection(collection)
-//        XCTAssertThrowsError(try database.getCollection("This is so cool"))
-//    }
+    func testNormalization() throws {
+        let baseLocation = URL(fileURLWithPath: #file, isDirectory: false).deletingLastPathComponent()
+        let dbLocation = baseLocation.appendingPathComponent("Resources", conformingTo: .directory)
+        let database = try MagnitudeDatabase(vectorDimensions: 1534, dataURL: dbLocation)
+                
+        try database.normalizeDatabase()
+        
+        let numb2: Int = try database.normalizeDatabase()
+        XCTAssert(numb2 == 0)
+    }
+    
+    func testLoadDatabase() throws {
+        let baseLocation = URL(fileURLWithPath: #file, isDirectory: false).deletingLastPathComponent()
+        let dbLocation = baseLocation.appendingPathComponent("Resources", conformingTo: .directory)
+        
+        let database = try MagnitudeDatabase(vectorDimensions: 1534, dataURL: dbLocation)
+
+        let results = try database.search(query: TestEmbeddings.marchTitle, amount: 2)
+        print(results)
+        XCTAssert(results.count == 2)
+    }
+    
+    // TODO: Add performance testing
 }

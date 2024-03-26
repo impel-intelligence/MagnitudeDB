@@ -6,7 +6,6 @@ DerivedData/
 .swiftpm/configuration/registries.json
 .swiftpm/xcode/package.xcworkspace/contents.xcworkspacedata
 .netrc
-Tests/MagnitudeDBTests/Resources/output/
-/Tests/MagnitudeDBTests/Resources/data.sql
+Tests/MagnitudeDBTests/Resources/
 /Package.resolved
 /.swiftpm/xcode/package.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
