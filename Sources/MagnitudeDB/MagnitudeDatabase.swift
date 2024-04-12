@@ -241,7 +241,6 @@ extension MagnitudeDatabase {
             
             _ = try documentsTable.update(document)
             numberNormalized += 1
-            print("Normalized \(document.id)")
         }
         
         return numberNormalized
