@@ -229,17 +229,19 @@ extension MagnitudeDatabase {
     @discardableResult
     public func normalizeDatabase() throws -> Int {
         let documentsTable = Table("documents")
+        let documentEmbedding = Expression<[Float]>("embedding")
+        let documentID = Expression<Int>("id")
         var numberNormalized = 0
         
         for raw in try db.prepare(documentsTable) {
-            var document: Document = try raw.decode()
-            guard document.embedding.contains(where: { $0 > 1 }) else {
+            var embedding = try raw.get(documentEmbedding)
+            guard embedding.contains(where: { $0 > 1 }) else {
                 continue // Already normalized
             }
             
-            faiss_fvec_renorm_L2(vectorDimensions, 1, &document.embedding)
+            faiss_fvec_renorm_L2(vectorDimensions, 1, &embedding)
             
-            _ = try documentsTable.update(document)
+            _ = try documentsTable.where(documentID == raw.get(documentID)).update(documentEmbedding <- embedding)
             numberNormalized += 1
         }
         
