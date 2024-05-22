@@ -11,8 +11,7 @@ let package = Package(
     ],
     products: [
         // Products define the executables and libraries a package produces, making them visible to other packages.
-        .library(name: "MagnitudeDB", targets: ["MagnitudeDB"]),
-        .library(name: "DynamicMagnitudeDB", type: .dynamic, targets: ["MagnitudeDB"])
+        .library(name: "MagnitudeDB", targets: ["MagnitudeDB"])
 
     ],
     dependencies: [
